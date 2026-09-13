@@ -1,0 +1,7 @@
+employee_id,full_name,department,salary,join_date
+101,John Doe,It,75000.0,2021-01-15
+102,Jane Smith,Hr,65000.0,2020-05-22
+103,Bob  Johnson,It,75000.0,2022-03-10
+104,Alice Brown,Finance,93500.0,2019-11-01
+105,Charlie Davis,It,71000.0,2021-08-19
+106,Eve Wilson,Finance,80000.0,2021-01-15
