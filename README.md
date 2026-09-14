@@ -1,161 +1,93 @@
-# Data Cleaning Agent
+# AI Data Cleaning Agent
 
-An automated Python-based data cleaning agent that identifies and cleans common data-quality issues in CSV datasets.
-
-The agent follows a structured cleaning pipeline to standardize column names, remove duplicate records, handle missing values, normalize text data, detect and cap numerical outliers, and export the cleaned dataset.
+An automated, AI-assisted Python data cleaning agent that profiles raw CSV datasets, leverages OpenAI (or an internal heuristic fallback engine) to determine optimal cleaning strategies, executes a data cleaning pipeline using Pandas, and generates an audit log report alongside the sanitized CSV.
 
 ---
 
 ## Overview
 
-Real-world datasets are often messy, inconsistent, incomplete, and noisy. Before performing analysis or building machine-learning models, the data must be cleaned and standardized.
+Real-world datasets are frequently messy, inconsistent, and noisy. Before conducting analysis or training machine learning models, data must be standardly cleaned and profiled.
 
-This project provides an automated `DataCleaningAgent` that performs the most common data-preprocessing tasks through a reusable pipeline.
+The **AI Data Cleaning Agent** automates this workflow by using an LLM to inspect dataset metadata, generate a JSON cleaning plan, and run an automated preprocessing pipeline with change tracking.
 
-### Cleaning Pipeline
+### Cleaning Pipeline Flow
 
 ```text
-Raw CSV Dataset
-       |
-       v
-Load Data
-       |
-       v
-Clean Column Names
-       |
-       v
-Remove Duplicate Rows
-       |
-       v
-Handle Missing Values
-       |
-       v
-Standardize Text
-       |
-       v
-Detect and Handle Outliers
-       |
-       v
-Export Clean Dataset
-```
-
----
+               Raw CSV Dataset
+                      |
+                      v
+          Data Ingestion & Profiling
+                      |
+                      v
+      AI Strategy Decision (OpenAI API / Heuristic Engine)
+                      |
+                      v
+         ---------------------------
+        |  Clean Column Names       |
+        |  Remove Duplicates        |
+        |  Standardize Text         |
+        |  Impute Missing Values    |
+        |  Detect & Cap Outliers    |
+         ---------------------------
+                      |
+           +----------+----------+
+           |                     |
+           v                     v
+   Export Cleaned CSV    Export Audit JSON
+  (cleaned_data.csv)   (cleaning_report.json)
 
 ## Features
 
-### 1. Column Name Standardization
+### 1. Dataset Profiling
 
-The agent standardizes column names by:
+Before altering any data, the agent constructs a detailed JSON metadata profile summarizing:
 
-* Removing leading and trailing whitespace
-* Converting names to lowercase
-* Replacing spaces with underscores
+* Row and column counts
+* Column data types
+* Missing value counts per column
+* Duplicate row count
 
-Example:
+### 2. AI-Driven Cleaning Strategy & Fallback Engine
 
-```text
-" Employee Name " -> "employee_name"
-"Annual Salary"   -> "annual_salary"
-```
+The agent sends the dataset profile to an AI model (`gpt-4o-mini`) to generate a dynamic JSON cleaning plan.
 
----
+> **Reliability Guarantee:** If an OpenAI API key is missing or out of API credits, the agent automatically catches the error and switches to an internal **Heuristic AI Planner** to ensure the pipeline executes without failing.
 
-### 2. Duplicate Removal
+### 3. Column Name Standardization
 
-Duplicate rows are automatically detected and removed using:
+* Strips leading and trailing whitespace
+* Converts names to lowercase
+* Replaces spaces with underscores (`" Full Name "` -> `"full_name"`)
 
-```python
-df.drop_duplicates()
-```
+### 4. Duplicate Record Removal
 
-The number of duplicate records removed is reported in the console.
+Identifies and drops 100% duplicate rows automatically while logging the number of removed entries.
 
----
+### 5. Smart Missing Value Imputation
 
-### 3. Missing Value Handling
+* **Numerical Columns:** Replaces missing values with the column **median** (reducing outlier skew).
+* **Categorical / Text Columns:** Replaces missing values with the column **mode**.
 
-Missing values are handled according to the data type.
+### 6. Text Standardization
 
-For numerical columns:
+* Removes leading/trailing whitespace padding across string columns.
+* Applies proper Title Casing (`" john doe "` -> `"John Doe"`).
 
-```text
-Missing values -> Median
-```
+### 7. Outlier Detection & Capping (IQR Method)
 
-For text or categorical columns:
+Detects extreme numerical anomalies using the Interquartile Range ($IQR = Q3 - Q1$). Values falling outside $[Q1 - 1.5 \times IQR, Q3 + 1.5 \times IQR]$ are capped to the upper or lower statistical boundary.
 
-```text
-Missing values -> Mode
-```
+### 8. Audit Report Generation
 
-Using the median for numerical data helps reduce the influence of extreme values compared with using the mean.
-
----
-
-### 4. Text Standardization
-
-Text columns are automatically:
-
-* Trimmed for unnecessary whitespace
-* Converted to title case
-
-Example:
-
-```text
-"  john doe " -> "John Doe"
-"MARY SMITH"  -> "Mary Smith"
-```
-
----
-
-### 5. Outlier Detection and Handling
-
-The project uses the Interquartile Range (IQR) method to identify extreme values.
-
-The calculation is:
-
-```text
-IQR = Q3 - Q1
-
-Lower Bound = Q1 - 1.5 × IQR
-Upper Bound = Q3 + 1.5 × IQR
-```
-
-Values outside these boundaries are identified as outliers and capped at the corresponding boundary rather than removed.
-
-The pipeline automatically applies this process to the `salary` column when it exists.
-
----
-
-### 6. Change Tracking
-
-The agent provides console output throughout the cleaning process so that users can see what operations were performed.
-
-Example:
-
-```text
-[*] Data loaded successfully. Initial shape: (100, 6)
-
-[+] Column names cleaned.
-
-[+] Duplicates checked: 4 duplicate row(s) identified and removed.
-
-[+] Missing values handled:
-    - 'age': 3 missing value(s) replaced with median (28.0).
-
-[+] Text standardization:
-    - Cleaned casing and whitespaces across 3 text columns.
-
-[+] Outliers handled in 'salary': 5 extreme value(s) capped using IQR.
-```
+Generates a `cleaning_report.json` file detailing the initial shape, final shape, AI decision parameters, and execution plan.
 
 ---
 
 ## Technologies Used
 
-* Python
-* Pandas – Data loading, manipulation, cleaning, and analysis
-* NumPy – Numerical operations and data processing
+* **Python**
+* **Pandas** – Data profiling, cleaning, and CSV transformations
+* **OpenAI API** – LLM-driven decision planning (`gpt-4o-mini`)
 
 ---
 
@@ -163,192 +95,187 @@ Example:
 
 ```text
 data-cleaning-agent/
-|
-├── messy_data.csv
-├── cleaned_data.csv
-├── data_cleaning_agent.py
-└── README.md
-```
+│
+├── messy_data.csv           # Input raw dataset
+├── cleaned_data.csv         # Processed CSV output
+├── cleaning_report.json     # Generated JSON audit log
+├── data_cleaning_agent.py   # Main Python agent code
+└── README.md                # Documentation
 
-`cleaned_data.csv` is generated automatically when the program is executed.
+```
 
 ---
 
-## Requirements
+## Requirements & Setup
 
-Make sure Python is installed on your system.
+### 1. Install Dependencies
 
-Install the required libraries using:
+Install the required Python packages:
 
 ```bash
-pip install pandas numpy
+pip install pandas openai
+
 ```
+
+### 2. Configure OpenAI API Key (Optional)
+
+Set your secret key as an environment variable in your terminal:
+
+* **PowerShell (Windows):**
+```powershell
+$env:OPENAI_API_KEY="your-openai-api-key"
+
+```
+
+
+* **Linux / macOS / Bash:**
+```bash
+export OPENAI_API_KEY="your-openai-api-key"
+
+```
+
+
+
+*(Note: If no API key is set or your credit balance is zero, the script automatically uses the internal heuristic fallback).*
 
 ---
 
-## Getting Started
+## Getting Started & Execution
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/data-cleaning-agent.git
+git clone [https://github.com/your-username/data-cleaning-agent.git](https://github.com/your-username/data-cleaning-agent.git)
 cd data-cleaning-agent
+
 ```
 
-### 2. Install Dependencies
+### 2. Add Your Input File
 
-```bash
-pip install pandas numpy
-```
+Ensure `messy_data.csv` is present in the project directory.
 
-### 3. Add Your Dataset
-
-Place your raw CSV file in the project directory and name it:
-
-```text
-messy_data.csv
-```
-
-### 4. Run the Program
+### 3. Run the Agent
 
 ```bash
 python data_cleaning_agent.py
+
 ```
 
-The cleaned dataset will be saved as:
+---
+
+## Code Workflow & Methods
+
+The core execution is encapsulated in the `DataCleaningAIAgent` class:
+
+| Method | Purpose |
+| --- | --- |
+| `profile_dataset()` | Analyzes raw dataset structure and returns metadata. |
+| `generate_cleaning_plan()` | Queries OpenAI API (or falls back to heuristics) for a JSON cleaning plan. |
+| `clean_column_names()` | Normalizes column header naming conventions. |
+| `remove_duplicates()` | Identifies and drops duplicate rows. |
+| `standardize_text()` | Trims whitespaces and applies Title Case to text columns. |
+| `handle_missing_values()` | Imputes numerical missing values with median and text with mode. |
+| `handle_outliers()` | Clips numerical outliers using Interquartile Range ($1.5 \times IQR$). |
+| `save_cleaned_data()` | Saves final sanitized DataFrame to `cleaned_data.csv`. |
+| `save_report()` | Exports summary audit log to `cleaning_report.json`. |
+| `run()` | Orchestrates the end-to-end execution pipeline. |
+
+---
+
+## Execution Outputs
+
+### Console Output Example
 
 ```text
-cleaned_data.csv
+Data loaded successfully.
+Original dataset shape: (7, 5)
+
+======================================
+       DATA CLEANING AI AGENT
+======================================
+
+Dataset Profile:
+{
+    "rows": 7,
+    "columns": 5,
+    "column_names": ["Employee ID", " Full Name", " Department ", " Salary", " Join Date"],
+    "missing_values": {" Department ": 1, " Salary": 1},
+    "duplicate_rows": 1
+}
+
+AI is analyzing the dataset...
+
+AI Cleaning Plan:
+{
+    "column_name_standardization": true,
+    "remove_duplicates": true,
+    "text_standardization": true,
+    "missing_value_strategy": "median_mode",
+    "detect_outliers": true,
+    "outlier_method": "IQR",
+    "outlier_columns": ["salary"],
+    "reasoning": "Standard numerical and text data cleaning strategy applied."
+}
+
+[AI ACTION] Column names standardized.
+[AI ACTION] Duplicate rows removed: 1
+[AI ACTION] Text standardized in 3 column(s).
+[AI ACTION] department: missing categorical values replaced with mode = IT
+[AI ACTION] salary: missing numerical values replaced with median = 75000.0
+[AI ACTION] salary: 1 outlier(s) capped using IQR.
+[AI ACTION] Cleaned dataset saved to: cleaned_data.csv
+[AI ACTION] Cleaning report saved to: cleaning_report.json
+
+======================================
+       CLEANING COMPLETED
+======================================
+Final dataset shape: (5, 5)
+
 ```
 
----
+### Sample `cleaning_report.json`
 
-## Usage
+```json
+{
+    "input_file": "messy_data.csv",
+    "original_shape": {
+        "rows": 7,
+        "columns": 5
+    },
+    "final_shape": {
+        "rows": 5,
+        "columns": 5
+    },
+    "ai_cleaning_plan": {
+        "column_name_standardization": true,
+        "remove_duplicates": true,
+        "text_standardization": true,
+        "missing_value_strategy": "median_mode",
+        "detect_outliers": true,
+        "outlier_method": "IQR",
+        "outlier_columns": [
+            "salary"
+        ],
+        "reasoning": "Standard numerical and text data cleaning strategy applied."
+    }
+}
 
-The main program initializes the cleaning agent with the raw CSV file:
-
-```python
-agent = DataCleaningAgent("messy_data.csv")
 ```
-
-Then the complete cleaning pipeline is executed:
-
-```python
-cleaned_df = agent.run_pipeline("cleaned_data.csv")
-```
-
-The cleaned DataFrame is also returned so that it can be further processed in Python.
-
----
-
-## How the Agent Works
-
-The `DataCleaningAgent` is organized into separate methods, with each method responsible for a specific cleaning task.
-
-| Method                    | Purpose                                 |
-| ------------------------- | --------------------------------------- |
-| `clean_column_names()`    | Standardizes column names               |
-| `remove_duplicates()`     | Removes duplicate rows                  |
-| `handle_missing_values()` | Fills missing values                    |
-| `standardize_text()`      | Cleans and formats text                 |
-| `handle_outliers()`       | Detects and caps outliers               |
-| `run_pipeline()`          | Executes the complete cleaning workflow |
-
-This modular design makes the project easier to understand, maintain, and extend.
-
----
-
-## Example
-
-Suppose the input dataset contains:
-
-```csv
- Employee Name ,Age,Salary
- john doe ,25,40000
- JOHN DOE,25,40000
- Mary Smith,,50000
- Alex Brown,30,250000
-```
-
-The cleaning process can:
-
-* Standardize `" Employee Name "` to `employee_name`
-* Remove duplicate records
-* Replace missing numerical values using the median
-* Standardize names such as `" john doe "` to `"John Doe"`
-* Detect extreme salary values using the IQR method
-* Save the processed dataset as `cleaned_data.csv`
-
----
-
-## Objectives
-
-The project is designed to:
-
-* Automate repetitive data-cleaning tasks
-* Improve dataset consistency
-* Reduce manual preprocessing effort
-* Make cleaning operations transparent
-* Produce a cleaner dataset suitable for further analysis
-
----
-
-## Future Enhancements
-
-Possible improvements include:
-
-* Automatic data-type detection and conversion
-* Configurable missing-value strategies
-* Detection of invalid values and formatting errors
-* Support for Excel and other file formats
-* Automatic data-quality reports
-* Before-and-after data-quality statistics
-* Configurable outlier handling methods
-* Logging changes to a separate audit file
-* Interactive dashboard for data-quality analysis
-
----
-
-## Important Considerations
-
-This project uses general-purpose cleaning rules. These rules may not be appropriate for every dataset.
-
-For example, capping outliers may be inappropriate when extreme values are genuine observations. Similarly, replacing missing categorical values with the mode may not always represent the intended meaning of the missing data.
-
-Therefore, cleaning strategies should always be reviewed according to the specific dataset and business context.
-
----
-
-## Contributing
-
-Contributions, suggestions, and improvements are welcome.
-
-To contribute:
-
-```bash
-git fork
-git clone <your-fork-url>
-git checkout -b feature/your-feature
-```
-
-Make your changes, commit them, and submit a pull request.
 
 ---
 
 ## License
 
-This project is available for educational and development purposes.
-
-You may add a specific license such as the MIT License depending on how you intend to distribute the project.
+This project is available under the MIT License for educational and development purposes.
 
 ---
 
 ## Author
 
-Sai Charan Devisetty
+**Sai Charan Devisetty**
 
-GitHub: `https://github.com/your-username`
+* GitHub: (https://github.com/heyyyysaiiii-commits)
 
----
+```
 
-If you find this project useful, consider giving the repository a star.
+```
